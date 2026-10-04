@@ -41,16 +41,10 @@ else:
     BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
     _INTERNAL = BASE_DIR
 
-ASSETS_DIR       = os.path.join(BASE_DIR, 'assets')
-LOGO_PATH        = os.path.join(ASSETS_DIR, 'logo.jpg')
-VERSION_FILE     = os.path.join(BASE_DIR, 'version.txt')
-EXE_NAME         = 'store-board-app.exe'
-
-# ── Remote asset cache ────────────────────────────────
-ASSET_CACHE_DIR    = os.path.join(BASE_DIR, 'cache')
-REMOTE_ASSETS_BASE = "https://azzahracomputertegal.com/assetazzahra/"
-REMOTE_ASSET_FILES = ["1.jpg", "2.png", "3.jpg", "4.webp", "5.png", "6.jpg"]
-ASSET_REFRESH_SEC  = 1800   # re-check remote assets every 30 min
+ASSETS_DIR   = os.path.join(BASE_DIR, 'assets')
+LOGO_PATH    = os.path.join(ASSETS_DIR, 'logo.jpg')
+VERSION_FILE = os.path.join(BASE_DIR, 'version.txt')
+EXE_NAME     = 'store-board-app.exe'
 
 # ═══════════════════════════════════════════════════════════
 #  CONFIG
@@ -64,7 +58,7 @@ RFID_TIMEOUT    = 500
 
 # ── Branding ───────────────────────────────────────────────
 STORE_NAME    = "AZZAHRA COMPUTER"
-FLAVOR_TEXT   = "Service Center #1 Tegal"
+FLAVOR_TEXT   = "Service Center #1"
 WEBSITE_URL   = "https://website.azzahracomputertegal.com/"
 WEBSITE_SHORT = "website.azzahracomputertegal.com"
 CONTACT_NUM   = "+62 859-4200-1720"
@@ -236,26 +230,23 @@ class SplashScreen:
         inner.pack(fill="both", expand=True)
 
         logo_loaded = False
-        for _ext in ('logo.png', 'logo.jpg', 'logo.webp'):
-            _path = os.path.join(ASSETS_DIR, _ext)
-            if HAS_PIL and os.path.exists(_path):
-                try:
-                    img = Image.open(_path)
-                    img.thumbnail((64, 64), Image.LANCZOS)
-                    self._splash_logo = ImageTk.PhotoImage(img)
-                    tk.Label(inner, image=self._splash_logo,
-                             bg=HEADER_BG).pack(pady=(24, 4))
-                    logo_loaded = True
-                    break
-                except Exception:
-                    pass
+        if HAS_PIL and os.path.exists(LOGO_PATH):
+            try:
+                img = Image.open(LOGO_PATH)
+                img.thumbnail((64, 64), Image.LANCZOS)
+                self._splash_logo = ImageTk.PhotoImage(img)
+                tk.Label(inner, image=self._splash_logo,
+                         bg=HEADER_BG).pack(pady=(24, 4))
+                logo_loaded = True
+            except Exception:
+                pass
 
         if not logo_loaded:
             tk.Label(inner, text=STORE_NAME,
                      font=("Consolas", 28, "bold"),
                      bg=HEADER_BG, fg=AMBER).pack(pady=(24, 0))
 
-        tk.Label(inner, text="MEMUAT…",
+        tk.Label(inner, text="LOADING…",
                  font=("Consolas", 10), bg=HEADER_BG, fg=TEXT_DIM).pack()
 
         self._bar_frame = tk.Frame(inner, bg=GRID_MED, height=4)
@@ -398,7 +389,7 @@ class BoardCanvas(tk.Canvas):
         if not page_data:
             fs = max(12, rh // 3)
             self.create_text(w // 2, h // 2,
-                             text="— Memuat… —",
+                             text="— Loading... —",
                              font=("Consolas", fs, "bold"),
                              fill=TEXT_DIM, anchor="center")
             return
@@ -504,61 +495,29 @@ class ImageCycler:
     def __init__(self, canvas):
         self.canvas        = canvas
         self.raw_images    = []
-        self.photo_refs   = []
+        self.photo_refs    = []
         self.current_index = 0
         self.panel_w       = 800
         self.panel_h       = 400
-        self._cycle_job   = None
-        self._loading_msg  = None
-        self._loading_pct  = 0
+        self._cycle_job    = None
         self._load_images()
 
     def _load_images(self):
-        """Load images from cache/ only (remote downloaded files).
-        Falls back to assets/ only if cache is empty (for first-run / offline).
-        """
         self.raw_images = []
-
-        # Collect from cache first
-        cache_candidates = []
-        if os.path.isdir(ASSET_CACHE_DIR):
-            try:
-                for f in sorted(os.listdir(ASSET_CACHE_DIR)):
-                    fl = f.lower()
-                    if fl in ('logo.jpg', 'logo.png', 'logo.webp'):
-                        continue
-                    if fl.endswith(self.VALID_EXTS):
-                        cache_candidates.append(os.path.join(ASSET_CACHE_DIR, f))
-            except OSError:
-                pass
-
-        # If cache has images, use only cache (no assets fallback for promos)
-        if cache_candidates:
-            candidates = cache_candidates
-        else:
-            # First-run / offline: try assets as one-time fallback
-            candidates = []
-            if os.path.isdir(ASSETS_DIR):
+        if not os.path.isdir(ASSETS_DIR):
+            os.makedirs(ASSETS_DIR, exist_ok=True)
+            return
+        for f in sorted(os.listdir(ASSETS_DIR)):
+            if f.lower() == 'logo.jpg':
+                continue
+            if f.lower().endswith(self.VALID_EXTS):
                 try:
-                    for f in sorted(os.listdir(ASSETS_DIR)):
-                        fl = f.lower()
-                        if fl in ('logo.jpg', 'logo.png', 'logo.webp'):
-                            continue
-                        if fl.endswith(self.VALID_EXTS):
-                            candidates.append(os.path.join(ASSETS_DIR, f))
-                except OSError:
+                    img = Image.open(os.path.join(ASSETS_DIR, f))
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    self.raw_images.append((f, img))
+                except Exception:
                     pass
-            else:
-                os.makedirs(ASSETS_DIR, exist_ok=True)
-
-        for path in candidates:
-            try:
-                img = Image.open(path)
-                if img.mode not in ('RGB', 'RGBA'):
-                    img = img.convert('RGB')
-                self.raw_images.append((os.path.basename(path), img))
-            except Exception:
-                pass
 
     def resize_all(self, w, h):
         self.panel_w    = max(w, 50)
@@ -573,89 +532,18 @@ class ImageCycler:
                 self.photo_refs.append(None)
         self.show_current()
 
-    def show_loading(self, message="Loading images...", percent=0):
-        """Show a loading / download progress indicator on the canvas."""
-        self.canvas.delete("all")
-        w = self.panel_w
-        h = self.panel_h
-        self._loading_msg = message
-        self._loading_pct = percent
-
-        cx = w // 2
-        cy = h // 2
-
-        # Dark overlay for contrast
-        self.canvas.create_rectangle(0, 0, w, h, fill="#1a2533", outline="")
-
-        # Icon / label
-        self.canvas.create_text(
-            cx, cy - 30,
-            text="⏳ Mengunduh Gambar Promo…",
-            font=("Consolas", max(12, h // 25), "bold"),
-            fill="#ffffff", anchor="center")
-
-        # Current file being downloaded
-        self.canvas.create_text(
-            cx, cy + 5,
-            text=message,
-            font=("Consolas", max(9, h // 40)),
-            fill="#a0b4c8", anchor="center")
-
-        # Progress bar background
-        bar_w  = max(120, w // 3)
-        bar_h  = 10
-        bar_x0 = cx - bar_w // 2
-        bar_y0 = cy + 30
-
-        self.canvas.create_rectangle(
-            bar_x0, bar_y0, bar_x0 + bar_w, bar_y0 + bar_h,
-            fill="#2a3a4d", outline="")
-
-        # Progress bar fill
-        fill_w = int(bar_w * max(0, min(percent, 100)) / 100)
-        if fill_w > 0:
-            self.canvas.create_rectangle(
-                bar_x0, bar_y0, bar_x0 + fill_w, bar_y0 + bar_h,
-                fill="#00884a", outline="")
-
-        # Percentage text
-        self.canvas.create_text(
-            cx, bar_y0 + bar_h + 16,
-            text=f"{percent}%",
-            font=("Consolas", max(9, h // 45)),
-            fill="#8896a6", anchor="center")
-
     def show_current(self):
         self.canvas.delete("all")
         w = self.panel_w
         h = self.panel_h
-
-        if self._loading_msg is not None and self._loading_pct < 100:
-            # Still in loading state — show it instead
-            self.show_loading(self._loading_msg, self._loading_pct)
-            return
-
-        if not self.photo_refs:
-            self.canvas.create_rectangle(0, 0, w, h, fill=PANEL_BG, outline="")
+        if not self.photo_refs or self.photo_refs[self.current_index] is None:
             self.canvas.create_text(
-                w // 2, h // 2 - 20,
-                text="Tidak Ada Gambar Promo",
-                font=("Consolas", max(12, h // 25), "bold"),
-                fill=TEXT_DIM, justify="center", anchor="center")
-            self.canvas.create_text(
-                w // 2, h // 2 + 20,
-                text="Tunggu unduhan selesai\natau letakkan gambar di assets/",
-                font=("Consolas", max(9, h // 40)),
-                fill=TEXT_DIM, justify="center", anchor="center")
+                w // 2, h // 2,
+                text="No Promotional Images\nPlace images in\nassets/ folder",
+                font=("Consolas", 16), fill=TEXT_DIM, justify="center")
             return
-
-        photo = self.photo_refs[self.current_index]
-        if photo is None:
-            self.show_current()
-            return
-
-        self.canvas.delete("all")
-        self.canvas.create_image(0, 0, anchor="nw", image=photo)
+        self.canvas.create_image(0, 0, anchor="nw",
+                                 image=self.photo_refs[self.current_index])
 
     def next_image(self):
         if self.photo_refs:
@@ -663,8 +551,6 @@ class ImageCycler:
         self.show_current()
 
     def start_cycling(self):
-        # Show loading screen immediately while waiting for images
-        self.show_loading("Menunggu gambar…", 0)
         self._cycle_job = self.canvas.after(
             IMAGE_CYCLE_SEC * 1000, self._cycle_tick)
 
@@ -720,12 +606,12 @@ class AutoUpdater:
         remote  = data.get("tag_name", "").lstrip('v')
 
         if compare_versions(remote, CURRENT_VERSION) <= 0:
-            self._status(f"v{CURRENT_VERSION} — sudah terbaru")
+            self._status(f"v{CURRENT_VERSION} — up to date")
             return
 
-        self._status(f"Update v{remote} tersedia…")
+        self._status(f"Update v{remote} available…")
         self.root.after(0,
-            lambda: Toast(self.root, f"Update v{remote} — mengunduh…", BLUE_SOFT))
+            lambda: Toast(self.root, f"Update v{remote} — downloading…", BLUE_SOFT))
 
         download_url = None
         for asset in data.get("assets", []):
@@ -742,12 +628,12 @@ class AutoUpdater:
         remote = r.text.strip().lstrip('v')
 
         if compare_versions(remote, CURRENT_VERSION) <= 0:
-            self._status(f"v{CURRENT_VERSION} — sudah terbaru")
+            self._status(f"v{CURRENT_VERSION} — up to date")
             return
 
-        self._status(f"Update v{remote} tersedia…")
+        self._status(f"Update v{remote} available…")
         self.root.after(0,
-            lambda: Toast(self.root, f"Update v{remote} — mengunduh…", BLUE_SOFT))
+            lambda: Toast(self.root, f"Update v{remote} — downloading…", BLUE_SOFT))
         self._download_and_apply(WEBSITE_DIST_URL, remote)
 
     def _download_and_apply(self, url, remote_version):
@@ -757,7 +643,7 @@ class AutoUpdater:
         try:
             req     = _get_requests()
             tmp_zip = os.path.join(tempfile.gettempdir(), "store_board_update.zip")
-            self._status("Mengunduh update…")
+            self._status("Downloading update…")
 
             r = req.get(url, timeout=120, stream=True)
             r.raise_for_status()
@@ -768,9 +654,9 @@ class AutoUpdater:
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total > 0:
-                        self._status(f"Mengunduh… {downloaded * 100 // total}%")
+                        self._status(f"Downloading… {downloaded * 100 // total}%")
 
-            self._status("Mengekstrak update…")
+            self._status("Extracting update…")
             extract_dir = os.path.join(tempfile.gettempdir(), "store_board_update")
             if os.path.exists(extract_dir):
                 shutil.rmtree(extract_dir)
@@ -785,17 +671,17 @@ class AutoUpdater:
                     os.path.join(extract_dir, contents[0])):
                 extract_dir = os.path.join(extract_dir, contents[0])
 
-            self._status("Menerapkan update…")
+            self._status("Applying update…")
             self.root.after(0,
-                lambda: Toast(self.root, "Update siap — memulai ulang…", GREEN))
+                lambda: Toast(self.root, "Update ready — restarting…", GREEN))
             self.root.after(3000,
                 lambda: self._apply_update(extract_dir))
 
         except Exception as e:
             self._updating = False
-            self._status(f"Update gagal: {e}")
+            self._status(f"Update failed: {e}")
             self.root.after(0,
-                lambda: Toast(self.root, f"Update gagal: {e}", RED))
+                lambda: Toast(self.root, f"Update failed: {e}", RED))
 
     def _apply_update(self, update_dir):
         try:
@@ -809,13 +695,13 @@ setlocal
 set "APP_DIR={BASE_DIR}"
 set "UPDATE_DIR={update_dir}"
 set "EXE_NAME={exe_name}"
-echo Memperbarui Store Board App...
+echo Updating Store Board App...
 timeout /t 3 /nobreak >nul
 taskkill /f /im "{exe_name}" 2>nul
 timeout /t 2 /nobreak >nul
 xcopy /s /e /y /i "%UPDATE_DIR%\\*" "%APP_DIR%\\" >nul 2>&1
 rd /s /q "%UPDATE_DIR%" 2>nul
-echo Update selesai. Memulai ulang...
+echo Update complete. Restarting...
 start "" "%APP_DIR%\\{exe_name}"
 (goto) 2>nul & del "%~f0"
 '''
@@ -837,151 +723,8 @@ start "" "%APP_DIR%\\{exe_name}"
     def check_now(self):
         if self._updating:
             return
-        self._status("Memeriksa update…")
+        self._status("Checking for updates…")
         threading.Thread(target=self._check_worker, daemon=True).start()
-
-
-# ═══════════════════════════════════════════════════════════
-#  REMOTE ASSET MANAGER
-# ═══════════════════════════════════════════════════════════
-class RemoteAssetManager:
-    """
-    Downloads REMOTE_ASSET_FILES from REMOTE_ASSETS_BASE into ASSET_CACHE_DIR.
-    Uses ETag / Last-Modified headers to avoid re-downloading unchanged files.
-    Calls `on_updated` (no args) on the main thread when any file changed.
-    Calls `on_progress(message, percent)` during download for loading UI.
-    """
-
-    _MANIFEST = "manifest.json"   # tracks ETags per filename
-
-    def __init__(self, root, on_updated=None, on_progress=None):
-        self.root        = root
-        self.on_updated  = on_updated or (lambda: None)
-        self.on_progress = on_progress or (lambda msg, pct: None)
-        self._job        = None
-        self._downloading = False
-        os.makedirs(ASSET_CACHE_DIR, exist_ok=True)
-        self._manifest   = self._load_manifest()
-
-    # ── public ────────────────────────────────────────────
-    def fetch_now(self):
-        """Start an immediate background fetch (non-blocking)."""
-        if self._downloading:
-            return
-        threading.Thread(target=self._fetch_worker, daemon=True).start()
-
-    def schedule(self, delay_sec=5):
-        """Schedule the first fetch then repeat every ASSET_REFRESH_SEC."""
-        self._job = self.root.after(delay_sec * 1000, self._tick)
-
-    def cancel(self):
-        if self._job:
-            self.root.after_cancel(self._job)
-            self._job = None
-
-    # ── internals ─────────────────────────────────────────
-    def _tick(self):
-        self.fetch_now()
-        self._job = self.root.after(ASSET_REFRESH_SEC * 1000, self._tick)
-
-    def _fetch_worker(self):
-        if self._downloading:
-            return
-        self._downloading = True
-        self.root.after(0, lambda: self.on_progress("Mempersiapkan unduhan...", 0))
-
-        req     = _get_requests()
-        changed = False
-        total   = len(REMOTE_ASSET_FILES)
-
-        for idx, filename in enumerate(REMOTE_ASSET_FILES):
-            url        = f"{REMOTE_ASSETS_BASE}/{filename}"
-            local_path = os.path.join(ASSET_CACHE_DIR, filename)
-            etag_key   = filename
-            pct        = int((idx / total) * 100)
-
-            # ── check if we need to download ──
-            need_download = True
-            try:
-                headers = {}
-                stored  = self._manifest.get(etag_key, {})
-                if stored.get("etag") and os.path.exists(local_path):
-                    headers["If-None-Match"] = stored["etag"]
-                elif stored.get("last_modified") and os.path.exists(local_path):
-                    headers["If-Modified-Since"] = stored["last_modified"]
-
-                # Lightweight HEAD-equivalent via range request
-                r_check = req.get(url, headers=headers, timeout=15)
-                if r_check.status_code == 304:
-                    # Not modified — skip
-                    need_download = False
-                    self.root.after(0, lambda f=filename, p=pct:
-                        self.on_progress(f"Terbaru: {f}", p))
-                elif r_check.status_code == 200:
-                    self._manifest[etag_key] = {
-                        "etag":          r_check.headers.get("ETag", ""),
-                        "last_modified": r_check.headers.get("Last-Modified", ""),
-                    }
-                    self._save_manifest()
-                    # File changed but we already have it from redirect — skip full download
-                    if os.path.exists(local_path):
-                        need_download = False
-            except Exception:
-                pass
-
-            if not need_download:
-                continue
-
-            # ── download the file ──
-            self.root.after(0, lambda f=filename, p=pct:
-                self.on_progress(f"Mengunduh: {f}", pct))
-
-            try:
-                r = req.get(url, timeout=30, stream=True)
-                r.raise_for_status()
-
-                tmp_path = local_path + ".tmp"
-                with open(tmp_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=16384):
-                        f.write(chunk)
-                os.replace(tmp_path, local_path)
-
-                # Save ETag / Last-Modified
-                self._manifest[etag_key] = {
-                    "etag":          r.headers.get("ETag", ""),
-                    "last_modified": r.headers.get("Last-Modified", ""),
-                }
-                self._save_manifest()
-                changed = True
-                self.root.after(0, lambda f=filename, p=int(((idx + 1) / total) * 100):
-                    self.on_progress(f"Tersimpan: {f}", p))
-
-            except Exception:
-                pass   # network failure — keep whatever we have cached
-
-        self._downloading = False
-        self.root.after(0, lambda: self.on_progress("Selesai", 100))
-
-        if changed:
-            self.root.after(200, self.on_updated)
-
-    # ── manifest helpers ──────────────────────────────────
-    def _manifest_path(self):
-        return os.path.join(ASSET_CACHE_DIR, self._MANIFEST)
-
-    def _load_manifest(self):
-        try:
-            with open(self._manifest_path(), 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
-
-    def _save_manifest(self):
-        try:
-            with open(self._manifest_path(), 'w') as f:
-                json.dump(self._manifest, f, indent=2)
-        except Exception:
-            pass
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1004,26 +747,22 @@ class AzzahraBoard:
         self._logo_photo    = None
         self.cycler         = None
         self.updater        = None
-        self.asset_manager  = None
 
         self._build_ui()
         self._build_footer()
         self._build_hidden_rfid()
 
         self.root.attributes("-fullscreen", True)
+        self.root.overrideredirect(True)
         self.root.update_idletasks()
+
+        self.root.bind("<Escape>",    lambda e: self.root.quit())
+        self.root.bind("<Control-u>", lambda e: self._manual_update_check())
 
         self.splash.finish()
         self._tick_clock()
-
-        # Keyboard shortcuts
-        self.root.bind("<Escape>",    lambda e: self.root.quit())
-        self.root.bind("<Control-m>", lambda e: self.root.iconify())
-        self.root.bind("<Control-u>", lambda e: self._manual_update_check())
-
         self.root.after(200,  self._load_orders)
         self.root.after(500,  self._init_image_cycler)
-        self.root.after(600,  self._init_remote_assets)   # cycler must exist first
         self.root.after(800,  self._init_auto_updater)
 
     # ══════════════════════════════════════════════════════
@@ -1195,26 +934,17 @@ class AzzahraBoard:
         if w < 10 or h < 10:
             return
         sz = min(w, h)
-        logo_loaded = False
-        if HAS_PIL:
-            for _ext in ('logo.png', 'logo.jpg', 'logo.webp'):
-                _path = os.path.join(ASSETS_DIR, _ext)
-                if os.path.exists(_path):
-                    try:
-                        img = Image.open(_path)
-                        if img.mode not in ('RGB', 'RGBA'):
-                            img = img.convert('RGB')
-                        img = img.resize((sz, sz), Image.LANCZOS)
-                        self._logo_photo = ImageTk.PhotoImage(img)
-                        self.logo_canvas.create_image(
-                            (w - sz) // 2, (h - sz) // 2,
-                            anchor="nw", image=self._logo_photo)
-                        logo_loaded = True
-                        break
-                    except Exception:
-                        pass
-        if logo_loaded:
-            return
+        if HAS_PIL and os.path.exists(LOGO_PATH):
+            try:
+                img = Image.open(LOGO_PATH)
+                img = img.resize((sz, sz), Image.LANCZOS)
+                self._logo_photo = ImageTk.PhotoImage(img)
+                self.logo_canvas.create_image(
+                    (w - sz) // 2, (h - sz) // 2,
+                    anchor="nw", image=self._logo_photo)
+                return
+            except Exception:
+                pass
         self._logo_photo = None
         p  = 4
         fs = max(10, sz // 3)
@@ -1309,77 +1039,24 @@ class AzzahraBoard:
         self.page_lbl.pack(side="left")
 
         right = tk.Frame(bar, bg=HEADER_BG)
-        right.pack(side="right", padx=(0, 8), pady=7)
+        right.pack(side="right", padx=(0, 20), pady=7)
 
         self.update_lbl = tk.Label(right, text=f"v{CURRENT_VERSION}",
                                    font=("Consolas", 9),
                                    bg=HEADER_BG, fg=TEXT_DIM)
-        self.update_lbl.pack(side="right", padx=(8, 0))
-
-        # Minimize button (rightmost — visible in both kiosk & windowed mode)
-        self.minimize_btn = tk.Button(
-            right, text="—", font=("Consolas", 10, "bold"),
-            bg=HEADER_BG, fg=TEXT_DIM, activebackground=GRID,
-            bd=1, relief="solid", padx=6, pady=0,
-            command=lambda: self.root.iconify())
-        self.minimize_btn.pack(side="right", padx=(4, 0))
+        self.update_lbl.pack(side="right")
 
     # ══════════════════════════════════════════════════════
     #  IMAGE CYCLER INIT
     # ══════════════════════════════════════════════════════
-    def _init_remote_assets(self):
-        """Start the remote asset manager; it will fetch & cache promo images."""
-        self.asset_manager = RemoteAssetManager(
-            self.root,
-            on_updated=self._on_remote_assets_updated,
-            on_progress=self._on_remote_progress,
-        )
-        # Show loading screen immediately on the promo canvas
-        w = self.img_canvas.winfo_width()
-        h = self.img_canvas.winfo_height()
-        if w > 10 and h > 10:
-            self.cycler.show_loading("Mempersiapkan unduhan…", 0)
-        self.asset_manager.schedule(delay_sec=2)   # first fetch in 2 s
-
-    def _on_remote_progress(self, message, percent):
-        """Show download progress on the promo canvas."""
-        if not self.cycler:
-            return
-        w = self.img_canvas.winfo_width()
-        h = self.img_canvas.winfo_height()
-        if w < 10 or h < 10:
-            return
-        # Update cycler's panel size to match canvas
-        self.cycler.panel_w = w
-        self.cycler.panel_h = h
-        self.cycler.show_loading(message, percent)
-
-    def _on_remote_assets_updated(self):
-        """Called on the main thread whenever cached images change on disk."""
-        if self.cycler:
-            # Reload images from cache and re-render
-            self.cycler._load_images()
-            w = self.img_canvas.winfo_width()
-            h = self.img_canvas.winfo_height()
-            if w > 50 and h > 50:
-                self.cycler.resize_all(w, h)
-            Toast(self.root, "Gambar promo berhasil diperbarui", GREEN)
-
     def _init_image_cycler(self):
         if not HAS_PIL:
             self.img_canvas.create_text(
                 400, 200,
-                text="Pasang Pillow\nuntuk menampilkan gambar",
+                text="Install Pillow\nfor image display",
                 font=("Consolas", 14), fill=TEXT_DIM, justify="center")
             return
         self.cycler = ImageCycler(self.img_canvas)
-        # Show loading screen immediately while waiting for remote fetch
-        w = self.img_canvas.winfo_width()
-        h = self.img_canvas.winfo_height()
-        if w > 10 and h > 10:
-            self.cycler.panel_w = w
-            self.cycler.panel_h = h
-            self.cycler.show_loading("Menunggu unduhan…", 0)
         self.root.after(200, self._apply_img_resize)
         self.root.after(1000,
             lambda: self.cycler.start_cycling() if self.cycler else None)
@@ -1397,7 +1074,7 @@ class AzzahraBoard:
 
     def _manual_update_check(self):
         if self.updater:
-            Toast(self.root, "Memeriksa update…", BLUE_SOFT)
+            Toast(self.root, "Checking for updates…", BLUE_SOFT)
             self.updater.check_now()
 
     # ══════════════════════════════════════════════════════
@@ -1514,7 +1191,7 @@ class AzzahraBoard:
         total = len(self.board.pages)
         curr  = self.board.current_page + 1
         self.page_lbl.config(
-            text="" if total <= 1 else f"HALAMAN {curr}/{total}")
+            text="" if total <= 1 else f"PAGE {curr}/{total}")
 
     # ══════════════════════════════════════════════════════
     #  STATUS + CLOCK
@@ -1547,18 +1224,6 @@ class AzzahraBoard:
 #  ENTRY POINT
 # ═══════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Store Board App")
-    parser.add_argument(
-        "--debug", "-d", action="store_true",
-        help="Run in windowed debug mode (no fullscreen, smaller window)")
-    parser.add_argument(
-        "--test", "-t", action="store_true",
-        help="Run in 1280x720 test window"
-    )
-    args = parser.parse_args()
-
     try:
         from ctypes import windll
         windll.shcore.SetProcessDpiAwareness(1)
@@ -1569,27 +1234,6 @@ if __name__ == "__main__":
     root.withdraw()
     splash = SplashScreen(root)
     root.update()
-
-    app = AzzahraBoard(root, splash)
+    AzzahraBoard(root, splash)
     root.deiconify()
-
-    if args.debug:
-        # Debug mode: windowed, smaller, resizable
-        root.attributes("-fullscreen", False)
-        root.overrideredirect(False)
-        root.geometry("1024x600")
-        root.resizable(True, True)
-        print("[DEBUG] Running in windowed mode — press Escape to quit")
-    elif args.test:
-        # Test mode: 720p window, still full UI
-        root.attributes("-fullscreen", False)
-        root.overrideredirect(False)
-        root.geometry("1280x720")
-        root.resizable(True, True)
-        print("[TEST] Running in 1280x720 test mode — press Escape to quit")
-    else:
-        # Normal kiosk mode: fullscreen, but keeps taskbar/Alt+Tab visible
-        # (overrideredirect removed so minimize + Alt+Tab work)
-        root.attributes("-fullscreen", True)
-
     root.mainloop()
